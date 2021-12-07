@@ -115,8 +115,19 @@ object LiveSpec extends DefaultRunnableSpec {
         for {
           tableName <- random.nextUUID.map(_.toString)
           _         <- tableDefinition(tableName).execute
+          _         <- insertData(tableName).execute
         } yield TableName(tableName)
       )(tName => deleteTable(tName.value).execute.orDie)
+
+  private def managedTableLayer(tableDefinition: String => CreateTable) =
+    ZManaged
+      .make(
+        for {
+          tableName <- random.nextUUID.map(_.toString)
+          _         <- tableDefinition(tableName).execute
+        } yield TableName(tableName)
+      )(tName => deleteTable(tName.value).execute.orDie)
+      .toLayer
 
   private def withTemporaryTable(
     tableDefinition: String => CreateTable,
@@ -193,10 +204,11 @@ object LiveSpec extends DefaultRunnableSpec {
           }
         },
         testM("get nonexistant returns empty") {
-          withDefaultTable { tableName =>
-            getItem(tableName, PrimaryKey(id -> "nowhere", number -> 1000)).execute.map(item => assert(item)(isNone))
-          }
-        }
+          for {
+            tableName <- ZIO.service[TableName].map(a => a.value)
+            item      <- getItem(tableName, PrimaryKey(id -> "nowhere", number -> 1000)).execute
+          } yield assert(item)(isNone)
+        }.provideSomeLayer[Random with Has[DynamoDBExecutor]](managedTableLayer(defaultTable))
       ),
       suite("scan tables")(
         testM("scan table") {
