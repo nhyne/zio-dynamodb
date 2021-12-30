@@ -626,7 +626,38 @@ object DynamoDBQuery {
     projections: List[ProjectionExpression] = List.empty, // if empty all attributes will be returned
     capacity: ReturnConsumedCapacity = ReturnConsumedCapacity.None,
     select: Option[Select] = None                         // if ProjectExpression supplied then only valid value is SpecificAttributes
-  ) extends Constructor[(Chunk[Item], LastEvaluatedKey)]
+  ) extends Constructor[(Chunk[Item], LastEvaluatedKey)] { self =>
+
+    def parallel(n: Int): ScanSomePar = ScanSomePar(self, n)
+
+  }
+
+  /* Do we need a whole new case class for this?
+    The primary issue is that parallel scans need to be handled differently by clients compared to sequential scans
+    A sequential scan simply returns the Chunk[Item] with an Option[LastEvaluatedKey]
+    A parallel scan will return a Chunk[(Chunk[Item], Option[LastEvaluatedKey], Int)] where the Int is the segment number
+
+    Do we want to have the sequential scan return the same type as the parallel scan with only a single tuple3 in the outer chunk? -- this feels bad
+    Should the library handle grabbing that single Tuple3 out of the chunk and simply return a (Chunk[Item], Option[LEK]) like it does now? -- how do we handle this type signature?
+    Do we have a different case class like ScanSomePar(scan: ScanSome, segments: Int) extends Constructor[Chunk[(Chunk[Item], Option[LEK], Int)]]???
+    The different case class would allow us to have helpers like `continueUntil(Chunk[Item] => Boolean)` that would continue the scan in parallel until some condition is met
+
+    We could also think about changing the LastEvaluatedKey to be a case class of Option[PrimaryKey], Segment = Int
+   */
+
+  private[dynamodb] final case class ScanSomePar(
+    scanSome: ScanSome,
+    parallelism: Int // TODO: Make this greater than zero
+  ) extends Constructor[Chunk[ScanSomePar.Response]]
+
+  object ScanSomePar {
+    final case class Response(
+      items: Chunk[Item],
+      lastEvaluatedKey: LastEvaluatedKey,
+      segment: Int
+    )
+    final case class Segment(number: Int, total: Int)
+  }
 
   private[dynamodb] final case class QuerySome(
     tableName: TableName,
@@ -844,6 +875,14 @@ object DynamoDBQuery {
       case scan @ ScanSome(_, _, _, _, _, _, _, _, _)         =>
         (
           Chunk(scan),
+          (results: Chunk[Any]) => {
+            results.head.asInstanceOf[A]
+          }
+        )
+
+      case scanPar @ ScanSomePar(_, _)                        =>
+        (
+          Chunk(scanPar),
           (results: Chunk[Any]) => {
             results.head.asInstanceOf[A]
           }

@@ -41,6 +41,7 @@ import io.github.vigoo.zioaws.dynamodb.model.{
 }
 import zio.dynamodb.ConsistencyMode.toBoolean
 import zio.dynamodb.DynamoDBQuery.BatchGetItem.TableGet
+import zio.dynamodb.DynamoDBQuery.ScanSomePar.Segment
 import zio.dynamodb.SSESpecification.SSEType
 import zio.stream.{ Stream, ZSink }
 
@@ -62,6 +63,7 @@ private[dynamodb] final case class DynamoDBExecutorImpl private (dynamoDb: Dynam
       case batchWriteItem: BatchWriteItem => doBatchWriteItem(batchWriteItem)
       case scanAll: ScanAll               => doScanAll(scanAll)
       case scanSome: ScanSome             => doScanSome(scanSome)
+      case scanSomePar: ScanSomePar       => doParallelScanSome(scanSomePar)
       case updateItem: UpdateItem         => doUpdateItem(updateItem)
       case createTable: CreateTable       => doCreateTable(createTable)
       case deleteItem: DeleteItem         => doDeleteItem(deleteItem)
@@ -236,9 +238,20 @@ private[dynamodb] final case class DynamoDBExecutorImpl private (dynamoDb: Dynam
   private def optionalItem(updateItemResponse: UpdateItemResponse.ReadOnly): Option[Item] =
     updateItemResponse.attributesValue.flatMap(m => toOption(m).map(toDynamoItem))
 
+  private def doParallelScanSome(
+    scanSomePar: ScanSomePar
+  ): ZIO[Any, Throwable, Chunk[ScanSomePar.Response]] =
+    ZIO.foreachPar(Chunk.unfold(0)(n => if (n < scanSomePar.parallelism) Some((n, n + 1)) else None)) { segment =>
+      dynamoDb
+        .scan(generateScanRequest(scanSomePar.scanSome, Some(Segment(segment, scanSomePar.parallelism))))
+        .mapBoth(_.toThrowable, toDynamoItem)
+        .run(ZSink.collectAll[Item])
+        .map(chunk => ScanSomePar.Response(chunk, chunk.lastOption, segment))
+    }
+
   private def doScanSome(scanSome: ScanSome): ZIO[Any, Throwable, (Chunk[Item], LastEvaluatedKey)] =
     dynamoDb
-      .scan(generateScanRequest(scanSome))
+      .scan(generateScanRequest(scanSome, None))
       .take(scanSome.limit.toLong)
       .mapBoth(_.toThrowable, toDynamoItem)
       .run(ZSink.collectAll[Item])
@@ -272,7 +285,8 @@ private[dynamodb] final case class DynamoDBExecutorImpl private (dynamoDb: Dynam
         )
     )
 
-  private def generateScanRequest(scanSome: ScanSome): ScanRequest = {
+  // Should we have the same function handle generating the scan
+  private def generateScanRequest(scanSome: ScanSome, maybeSegment: Option[Segment]): ScanRequest = {
     val filterExpression = scanSome.filterExpression.map(fe => fe.render.execute)
     ScanRequest(
       tableName = scanSome.tableName.value,
@@ -284,7 +298,9 @@ private[dynamodb] final case class DynamoDBExecutorImpl private (dynamoDb: Dynam
       projectionExpression = toOption(scanSome.projections).map(_.mkString(", ")),
       filterExpression = filterExpression.map(_._2),
       expressionAttributeValues = filterExpression.flatMap(a => aliasMapToExpressionZIOAwsAttributeValues(a._1)),
-      consistentRead = Some(toBoolean(scanSome.consistency))
+      consistentRead = Some(toBoolean(scanSome.consistency)),
+      segment = maybeSegment.map(_.number),
+      totalSegments = maybeSegment.map(_.total)
     )
   }
 
