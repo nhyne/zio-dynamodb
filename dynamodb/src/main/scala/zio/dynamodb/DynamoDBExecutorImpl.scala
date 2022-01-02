@@ -243,7 +243,14 @@ private[dynamodb] final case class DynamoDBExecutorImpl private (dynamoDb: Dynam
   ): ZIO[Any, Throwable, Chunk[ScanSomePar.Response]] =
     ZIO.foreachPar(Chunk.unfold(0)(n => if (n < scanSomePar.parallelism) Some((n, n + 1)) else None)) { segment =>
       dynamoDb
-        .scan(generateScanRequest(scanSomePar.scanSome, Some(Segment(segment, scanSomePar.parallelism))))
+        .scan(
+          generateScanRequest(
+            scanSomePar.scanSome.copy(exclusiveStartKey =
+              scanSomePar.exclusiveStartKeys.flatMap(l => l.lift(segment)) // This feels very fragile
+            ),
+            Some(Segment(segment, scanSomePar.parallelism))
+          )
+        )
         .mapBoth(_.toThrowable, toDynamoItem)
         .run(ZSink.collectAll[Item])
         .map(chunk => ScanSomePar.Response(chunk, chunk.lastOption, segment))
@@ -285,7 +292,7 @@ private[dynamodb] final case class DynamoDBExecutorImpl private (dynamoDb: Dynam
         )
     )
 
-  // Should we have the same function handle generating the scan
+  // Should we have the same function handle generating the scan?
   private def generateScanRequest(scanSome: ScanSome, maybeSegment: Option[Segment]): ScanRequest = {
     val filterExpression = scanSome.filterExpression.map(fe => fe.render.execute)
     ScanRequest(
@@ -339,8 +346,7 @@ private[dynamodb] final case class DynamoDBExecutorImpl private (dynamoDb: Dynam
   private def doGetItem(getItem: GetItem): ZIO[Any, Throwable, Option[Item]] =
     dynamoDb
       .getItem(generateGetItemRequest(getItem))
-      .mapError(_.toThrowable)
-      .map(_.itemValue.map(toDynamoItem))
+      .mapBoth(_.toThrowable, _.itemValue.map(toDynamoItem))
 
   private def toDynamoItem(attrMap: ScalaMap[String, ZIOAwsAttributeValue.ReadOnly]): Item =
     Item(attrMap.flatMap { case (k, v) => awsAttrValToAttrVal(v).map(attrVal => (k, attrVal)) })

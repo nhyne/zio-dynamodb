@@ -225,7 +225,26 @@ object LiveSpec extends DefaultRunnableSpec {
               chunk  <- stream.runCollect
             } yield assert(chunk)(equalTo(Chunk(aviPerson, avi2Person, avi3Person)))
           }
-        }
+        },
+        suite("parallel scans")(
+          testM("simple parallel scan") {
+            withDefaultTable { tableName =>
+              for {
+                _                               <- ZIO.unit
+                scanSomePar                      = scanSomeItem(tableName, 100).parallel(8)
+                chunk                           <- scanSomePar.execute
+                (items, lastEvalKeysAndSegments) = chunk.foldLeft((Chunk[Item](), Chunk[(LastEvaluatedKey, Int)]())) {
+                                                     case ((items, keysAndSegments), res) =>
+                                                       (
+                                                         items ++ res.items,
+                                                         keysAndSegments :+ ((res.lastEvaluatedKey, res.segmentNumber))
+                                                       )
+                                                   }
+
+              } yield assert(items)(equalTo(Chunk.empty)) && assert(lastEvalKeysAndSegments)(equalTo(Chunk.empty))
+            }
+          }
+        )
       ),
       suite("query tables")(
         testM("query less than") {
@@ -469,36 +488,34 @@ object LiveSpec extends DefaultRunnableSpec {
             }
           },
           testM("append to list") {
-            withDefaultTable {
-              tableName =>
-                for {
-                  _       <- updateItem(tableName, secondPrimaryKey)($("listThing").set(List(1))).execute
-                  _       <- updateItem(tableName, secondPrimaryKey)($("listThing").appendList(Chunk(2, 3, 4))).execute
-                  // REVIEW(john): Getting None when a projection expression is added here
-                  updated <- getItem(tableName, secondPrimaryKey).execute
-                } yield assert(
-                  updated.map(a =>
-                    a.get("listThing")(
-                      FromAttributeValue.iterableFromAttributeValue(FromAttributeValue.intFromAttributeValue)
-                    )
+            withDefaultTable { tableName =>
+              for {
+                _       <- updateItem(tableName, secondPrimaryKey)($("listThing").set(List(1))).execute
+                _       <- updateItem(tableName, secondPrimaryKey)($("listThing").appendList(Chunk(2, 3, 4))).execute
+                // REVIEW(john): Getting None when a projection expression is added here
+                updated <- getItem(tableName, secondPrimaryKey).execute
+              } yield assert(
+                updated.map(a =>
+                  a.get("listThing")(
+                    FromAttributeValue.iterableFromAttributeValue(FromAttributeValue.intFromAttributeValue)
                   )
-                )(equalTo(Some(Right(List(1, 2, 3, 4)))))
+                )
+              )(equalTo(Some(Right(List(1, 2, 3, 4)))))
             }
           },
           testM("prepend to list") {
-            withDefaultTable {
-              tableName =>
-                for {
-                  _       <- updateItem(tableName, secondPrimaryKey)($("listThing").set(List(1))).execute
-                  _       <- updateItem(tableName, secondPrimaryKey)($("listThing").prependList(Chunk(-1, 0))).execute
-                  updated <- getItem(tableName, secondPrimaryKey).execute
-                } yield assert(
-                  updated.map(a =>
-                    a.get("listThing")(
-                      FromAttributeValue.iterableFromAttributeValue(FromAttributeValue.intFromAttributeValue)
-                    )
+            withDefaultTable { tableName =>
+              for {
+                _       <- updateItem(tableName, secondPrimaryKey)($("listThing").set(List(1))).execute
+                _       <- updateItem(tableName, secondPrimaryKey)($("listThing").prependList(Chunk(-1, 0))).execute
+                updated <- getItem(tableName, secondPrimaryKey).execute
+              } yield assert(
+                updated.map(a =>
+                  a.get("listThing")(
+                    FromAttributeValue.iterableFromAttributeValue(FromAttributeValue.intFromAttributeValue)
                   )
-                )(equalTo(Some(Right(List(-1, 0, 1)))))
+                )
+              )(equalTo(Some(Right(List(-1, 0, 1)))))
             }
           },
           testM("set an Item Attribute") {

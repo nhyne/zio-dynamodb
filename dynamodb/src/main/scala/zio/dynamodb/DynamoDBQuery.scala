@@ -628,14 +628,24 @@ object DynamoDBQuery {
     select: Option[Select] = None                         // if ProjectExpression supplied then only valid value is SpecificAttributes
   ) extends Constructor[(Chunk[Item], LastEvaluatedKey)] { self =>
 
-    def parallel(n: Int): ScanSomePar = ScanSomePar(self, n)
+    // Not sure if setting the ESK to None is good or bad here?
+    // Almost feel like we should just copy most of the ScanSome case class into the ScanSomePar case class and remove fields we don't need
+    def parallel(n: Int): ScanSomePar =
+      ScanSomePar(
+        self.copy(exclusiveStartKey = None),
+        n,
+        self.exclusiveStartKey.map(primaryKey => List.fill(n)(primaryKey))
+      )
+
+    def parallel(n: Int, exclusiveStartKeys: List[PrimaryKey]): ScanSomePar =
+      ScanSomePar(self.copy(exclusiveStartKey = None), n, Some(exclusiveStartKeys))
 
   }
 
   /* Do we need a whole new case class for this?
     The primary issue is that parallel scans need to be handled differently by clients compared to sequential scans
-    A sequential scan simply returns the Chunk[Item] with an Option[LastEvaluatedKey]
-    A parallel scan will return a Chunk[(Chunk[Item], Option[LastEvaluatedKey], Int)] where the Int is the segment number
+    A sequential scan simply returns the Chunk[Item] with an Option[PrimaryKey]
+    A parallel scan will return a Chunk[(Chunk[Item], Option[PrimaryKey], Int)] where the Int is the segment number. The segment number and primary key are used together to continue scanning
 
     Do we want to have the sequential scan return the same type as the parallel scan with only a single tuple3 in the outer chunk? -- this feels bad
     Should the library handle grabbing that single Tuple3 out of the chunk and simply return a (Chunk[Item], Option[LEK]) like it does now? -- how do we handle this type signature?
@@ -645,18 +655,28 @@ object DynamoDBQuery {
     We could also think about changing the LastEvaluatedKey to be a case class of Option[PrimaryKey], Segment = Int
    */
 
+  // Would be really nice to have dependent types here so we can force the parallelism and exclusive start keys to be the same length
+  // Should handle this in the constructors
+
+  // This could be really confusing as we have a scanSome which has its own exclusiveStartKey value and then our list of them
   private[dynamodb] final case class ScanSomePar(
     scanSome: ScanSome,
-    parallelism: Int // TODO: Make this greater than zero
+    parallelism: Int, // TODO: Make this greater than zero
+    exclusiveStartKeys: Option[List[PrimaryKey]]
   ) extends Constructor[Chunk[ScanSomePar.Response]]
 
+  // The last evaluated key needs to be used in combination with the segment ID to continue scanning
   object ScanSomePar {
     final case class Response(
       items: Chunk[Item],
       lastEvaluatedKey: LastEvaluatedKey,
-      segment: Int
+      segmentNumber: Int
     )
-    final case class Segment(number: Int, total: Int)
+
+    final case class Segment(
+      number: Int,
+      total: Int
+    ) // TODO: Refine these using zio-prelude
   }
 
   private[dynamodb] final case class QuerySome(
@@ -880,7 +900,7 @@ object DynamoDBQuery {
           }
         )
 
-      case scanPar @ ScanSomePar(_, _)                        =>
+      case scanPar @ ScanSomePar(_, _, _)                     =>
         (
           Chunk(scanPar),
           (results: Chunk[Any]) => {
