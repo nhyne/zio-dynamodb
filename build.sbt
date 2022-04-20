@@ -84,7 +84,6 @@ lazy val zioDynamodb = module("zio-dynamodb", "dynamodb")
       "dev.zio"               %% "zio-aws-http4s"        % zioAwsVersion,
       "dev.zio"               %% "zio-aws-netty"         % zioAwsVersion,
       "dev.zio"               %% "zio-aws-dynamodb"      % zioAwsVersion,
-      "org.scala-lang"         % "scala-reflect"         % scalaVersion.value,
       "software.amazon.awssdk" % "dynamodb"              % "2.17.166",
       "com.amazonaws"          % "DynamoDBLocal"         % "1.17.0"   % "it,test"
     ),
@@ -94,17 +93,16 @@ lazy val zioDynamodb = module("zio-dynamodb", "dynamodb")
       val file                     = dir / "zio" / "dynamodb" / "GeneratedAttrMapApplies.scala"
       def upperAlpha(i: Int): Char = (('A'.toInt - 1) + i).toChar
       def lowerAlpha(i: Int): Char = (('a'.toInt - 1) + i).toChar
-      val applyMethods             = (1 to 22).map {
-        i =>
-          val types     = (1 to i).map(upperAlpha).mkString(", ")
-          val tparams   = (1 to i).map(p => s"t$p: (String, ${upperAlpha(p)})").mkString(", ")
-          val implicits = (1 to i).map(p => s"${lowerAlpha(p)}: ToAttributeValue[${upperAlpha(p)}]").mkString(", ")
-          val tentries  = (1 to i).map(p => s"t$p._1 -> ${lowerAlpha(p)}.toAttributeValue(t$p._2)").mkString(", ")
+      val applyMethods             = (1 to 22).map { i =>
+        val types     = (1 to i).map(upperAlpha).mkString(", ")
+        val tparams   = (1 to i).map(p => s"t$p: (String, ${upperAlpha(p)})").mkString(", ")
+        val implicits = (1 to i).map(p => s"${lowerAlpha(p)}: ToAttributeValue[${upperAlpha(p)}]").mkString(", ")
+        val tentries  = (1 to i).map(p => s"t$p._1 -> ${lowerAlpha(p)}.toAttributeValue(t$p._2)").mkString(", ")
 
-          s"""def apply[$types]($tparams)(implicit $implicits): AttrMap =
-             |    AttrMap(
-             |      Map($tentries)
-             |    )""".stripMargin
+        s"""def apply[$types]($tparams)(implicit $implicits): AttrMap =
+           |    AttrMap(
+           |      Map($tentries)
+           |    )""".stripMargin
       }
       IO.write(
         file,
@@ -121,18 +119,17 @@ lazy val zioDynamodb = module("zio-dynamodb", "dynamodb")
       val dir                      = (Compile / sourceManaged).value
       val file                     = dir / "zio" / "dynamodb" / "Zippable.scala"
       def upperAlpha(i: Int): Char = (('A'.toInt - 1) + i).toChar
-      val implicitZippables        = (3 to 22).map {
-        i =>
-          val types      = (1 until i).map(upperAlpha).mkString(", ")
-          val leftTuples = (1 until i).map(i => s"left._$i").mkString(", ")
+      val implicitZippables        = (3 to 22).map { i =>
+        val types      = (1 until i).map(upperAlpha).mkString(", ")
+        val leftTuples = (1 until i).map(i => s"left._$i").mkString(", ")
 
-          s"""implicit def Zippable$i[$types, Z]: Zippable.Out[($types), Z, ($types, Z)] =
-             |    new Zippable[($types), Z] {
-             |      type Out = ($types, Z)
-             |
-             |      def zip(left: ($types), right: Z): Out = ($leftTuples, right)
-             |    }
-             |""".stripMargin
+        s"""implicit def Zippable$i[$types, Z]: Zippable.Out[($types), Z, ($types, Z)] =
+           |    new Zippable[($types), Z] {
+           |      type Out = ($types, Z)
+           |
+           |      def zip(left: ($types), right: Z): Out = ($leftTuples, right)
+           |    }
+           |""".stripMargin
       }
       IO.write(
         file,
@@ -193,20 +190,19 @@ lazy val zioDynamodb = module("zio-dynamodb", "dynamodb")
       val file                     = dir / "zio" / "dynamodb" / "GeneratedFromAttributeValueAs.scala"
       def upperAlpha(i: Int): Char = (('A'.toInt - 1) + i).toChar
       def lowerAlpha(i: Int): Char = (('a'.toInt - 1) + i).toChar
-      val applyMethods             = (2 to 22).map {
-        i =>
-          val returnType = upperAlpha(i + 1)
-          val tparams    = (1 to i).map(p => s"${upperAlpha(p)}: FromAttributeValue").mkString(", ")
-          val params     = (1 to i).map(p => s"field$p: String").mkString(",\n    ")
-          val ftypes     = (1 to i).map(p => s"${upperAlpha(p)}").mkString(", ")
-          val fparams    = (1 to i).map(p => s"${lowerAlpha(p)}").mkString(", ")
-          val gets       = (1 to i).map(p => s"${lowerAlpha(p)} <- get[${upperAlpha(p)}](field$p)").mkString("\n      ")
-          s"""def as[$tparams, $returnType](
-             |    $params
-             |  )(fn: ($ftypes) => $returnType): Either[String, $returnType] =
-             |    for {
-             |      $gets
-             |    } yield fn($fparams)""".stripMargin
+      val applyMethods             = (2 to 22).map { i =>
+        val returnType = upperAlpha(i + 1)
+        val tparams    = (1 to i).map(p => s"${upperAlpha(p)}: FromAttributeValue").mkString(", ")
+        val params     = (1 to i).map(p => s"field$p: String").mkString(",\n    ")
+        val ftypes     = (1 to i).map(p => s"${upperAlpha(p)}").mkString(", ")
+        val fparams    = (1 to i).map(p => s"${lowerAlpha(p)}").mkString(", ")
+        val gets       = (1 to i).map(p => s"${lowerAlpha(p)} <- get[${upperAlpha(p)}](field$p)").mkString("\n      ")
+        s"""def as[$tparams, $returnType](
+           |    $params
+           |  )(fn: ($ftypes) => $returnType): Either[String, $returnType] =
+           |    for {
+           |      $gets
+           |    } yield fn($fparams)""".stripMargin
       }
       IO.write(
         file,
@@ -224,20 +220,19 @@ lazy val zioDynamodb = module("zio-dynamodb", "dynamodb")
       val file                     = dir / "zio" / "dynamodb" / "GeneratedFromAttributeValueAs.scala"
       def upperAlpha(i: Int): Char = (('A'.toInt - 1) + i).toChar
       def lowerAlpha(i: Int): Char = (('a'.toInt - 1) + i).toChar
-      val applyMethods             = (2 to 22).map {
-        i =>
-          val returnType = upperAlpha(i + 1)
-          val tparams    = (1 to i).map(p => s"${upperAlpha(p)}: FromAttributeValue").mkString(", ")
-          val params     = (1 to i).map(p => s"field$p: String").mkString(",\n    ")
-          val ftypes     = (1 to i).map(p => s"${upperAlpha(p)}").mkString(", ")
-          val fparams    = (1 to i).map(p => s"${lowerAlpha(p)}").mkString(", ")
-          val gets       = (1 to i).map(p => s"${lowerAlpha(p)} <- get[${upperAlpha(p)}](field$p)").mkString("\n      ")
-          s"""def as[$tparams, $returnType](
-             |    $params
-             |  )(fn: ($ftypes) => $returnType): Either[String, $returnType] =
-             |    for {
-             |      $gets
-             |    } yield fn($fparams)""".stripMargin
+      val applyMethods             = (2 to 22).map { i =>
+        val returnType = upperAlpha(i + 1)
+        val tparams    = (1 to i).map(p => s"${upperAlpha(p)}: FromAttributeValue").mkString(", ")
+        val params     = (1 to i).map(p => s"field$p: String").mkString(",\n    ")
+        val ftypes     = (1 to i).map(p => s"${upperAlpha(p)}").mkString(", ")
+        val fparams    = (1 to i).map(p => s"${lowerAlpha(p)}").mkString(", ")
+        val gets       = (1 to i).map(p => s"${lowerAlpha(p)} <- get[${upperAlpha(p)}](field$p)").mkString("\n      ")
+        s"""def as[$tparams, $returnType](
+           |    $params
+           |  )(fn: ($ftypes) => $returnType): Either[String, $returnType] =
+           |    for {
+           |      $gets
+           |    } yield fn($fparams)""".stripMargin
       }
       IO.write(
         file,
@@ -254,18 +249,17 @@ lazy val zioDynamodb = module("zio-dynamodb", "dynamodb")
       val dir                      = (Compile / sourceManaged).value
       val file                     = dir / "zio" / "dynamodb" / "GeneratedCaseClassDecoders.scala"
       def upperAlpha(i: Int): Char = (('A'.toInt - 1) + i).toChar
-      val applyMethods             = (1 to 22).map {
-        i =>
-          val constructorParams = (1 to i)
-            .map(p => s"xs(${p - 1}).asInstanceOf[${upperAlpha(p)}]")
-            .mkString(", ")
-          val fieldParams       = (1 to i).map(p => s"schema.field${if (i == 1) "" else p.toString}").mkString(",")
-          val fieldTypes        = (1 to i).map(p => s"${upperAlpha(p)}").mkString(", ")
-          s"""def caseClass${i}Decoder[$fieldTypes, Z](schema: Schema.CaseClass${i}[$fieldTypes, Z]): Decoder[Z] =  { (av: AttributeValue) =>
-             |    Codec.Decoder.decodeFields(av, $fieldParams).map { xs =>
-             |      schema.construct($constructorParams)
-             |    }
-             |  }""".stripMargin
+      val applyMethods             = (1 to 22).map { i =>
+        val constructorParams = (1 to i)
+          .map(p => s"xs(${p - 1}).asInstanceOf[${upperAlpha(p)}]")
+          .mkString(", ")
+        val fieldParams       = (1 to i).map(p => s"schema.field${if (i == 1) "" else p.toString}").mkString(",")
+        val fieldTypes        = (1 to i).map(p => s"${upperAlpha(p)}").mkString(", ")
+        s"""def caseClass${i}Decoder[$fieldTypes, Z](schema: Schema.CaseClass${i}[$fieldTypes, Z]): Decoder[Z] =  { (av: AttributeValue) =>
+           |    Codec.Decoder.decodeFields(av, $fieldParams).map { xs =>
+           |      schema.construct($constructorParams)
+           |    }
+           |  }""".stripMargin
       }
       IO.write(
         file,

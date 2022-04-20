@@ -84,14 +84,15 @@ object BuildHelper {
       libraryDependencies ++= {
         if (scalaVersion.value == Scala3)
           Seq(
-            "com.github.ghik"                 % s"silencer-lib_$Scala213" % SilencerVersion % Provided
+            "com.github.ghik"                 % s"silencer-lib_$Scala213" % SilencerVersion    % Provided
           )
         else
           Seq(
-            ("com.github.ghik"                % "silencer-lib"            % SilencerVersion % Provided)
+            ("com.github.ghik"                % "silencer-lib"            % SilencerVersion    % Provided)
               .cross(CrossVersion.full),
             compilerPlugin(("com.github.ghik" % "silencer-plugin"         % SilencerVersion).cross(CrossVersion.full)),
-            compilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
+            compilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
+            "org.scala-lang"                  % "scala-reflect"           % scalaVersion.value % Provided
           )
       },
       incOptions ~= (_.withLogRecompileOnMacro(false))
