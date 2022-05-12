@@ -3,6 +3,7 @@ package zio.dynamodb
 import zio.dynamodb.ConditionExpression.Operand._
 import zio.dynamodb.ConditionExpression._
 import zio.schema.Schema
+import scala.collection.immutable.Set
 
 sealed trait AttributeValue { self =>
   def decode[A](implicit schema: Schema[A]): Either[String, A] = Codec.decoder(schema)(self)
@@ -49,5 +50,5 @@ object AttributeValue {
 
   def encode[A](a: A)(implicit schema: Schema[A]): AttributeValue = Codec.encoder(schema)(a)
 
-  implicit val attributeValueToAttributeValue: ToAttributeValue[AttributeValue] = identity(_)
+  implicit val attributeValueToAttributeValue: ToAttributeValue[AttributeValue] = { a => a }
 }

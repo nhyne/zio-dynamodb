@@ -60,6 +60,8 @@ private[dynamodb] object Codec {
           dynamicEncoder
         case Schema.SemiDynamic(_, _)                                                                                                                                                                                                                                                       =>
           _ => AttributeValue.Null
+        case Schema.CaseClass0(_, _)                                                                                                                                                                                                                                                        =>
+          caseClassEncoder()
         case Schema.CaseClass1(f, _, ext, _)                                                                                                                                                                                                                                                =>
           caseClassEncoder(f -> ext)
         case Schema.CaseClass2(f1, f2, _, ext1, ext2, _)                                                                                                                                                                                                                                    =>
@@ -210,6 +212,7 @@ private[dynamodb] object Codec {
         case StandardType.CharType                      => (a: A) => AttributeValue.String(Character.toString(a))
         case StandardType.StringType                    => (a: A) => AttributeValue.String(a.toString)
         case StandardType.BoolType                      => (a: A) => AttributeValue.Bool(a.asInstanceOf[Boolean])
+        case StandardType.ByteType                      => (_: A) => ???
         case StandardType.BinaryType                    => (a: A) => AttributeValue.Binary(a)
         case StandardType.ShortType                     => (a: A) => AttributeValue.Number(BigDecimal(a.toString))
         case StandardType.IntType                       => (a: A) => AttributeValue.Number(BigDecimal(a.toString))
@@ -404,6 +407,7 @@ private[dynamodb] object Codec {
           setDecoder(ks).asInstanceOf[Decoder[A]]
         case Schema.MapSchema(ks, vs, _)                                                                                                                                      =>
           mapDecoder(ks, vs).asInstanceOf[Decoder[A]]
+        case _ @Schema.CaseClass0(_, _)                                                                                                                                       => ???
         case s @ Schema.CaseClass1(_, _, _, _)                                                                                                                                => caseClass1Decoder(s)
         case s @ Schema.CaseClass2(_, _, _, _, _, _)                                                                                                                          => caseClass2Decoder(s)
         case s @ Schema.CaseClass3(_, _, _, _, _, _, _, _)                                                                                                                    => caseClass3Decoder(s)
@@ -522,6 +526,7 @@ private[dynamodb] object Codec {
           (av: AttributeValue) => FromAttributeValue.stringFromAttributeValue.fromAttributeValue(av)
         case StandardType.BoolType                      =>
           (av: AttributeValue) => FromAttributeValue.booleanFromAttributeValue.fromAttributeValue(av)
+        case StandardType.ByteType                      => ???
         case StandardType.ShortType                     =>
           (av: AttributeValue) => FromAttributeValue.shortFromAttributeValue.fromAttributeValue(av)
         case StandardType.IntType                       =>

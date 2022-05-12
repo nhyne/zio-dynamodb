@@ -56,7 +56,7 @@ def copyJarSetting(dir: String) =
 
 val zioVersion       = "2.0.0-RC5"
 val zioAwsVersion    = "5.17.170.1"
-val zioSchemaVersion = "0.2.0-RC5"
+val zioSchemaVersion = "0.1.9+2-08eabea6-SNAPSHOT"
 
 lazy val root =
   project
